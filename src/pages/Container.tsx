@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Box from '../components/Box';
 import Status from '../components/Status';
+import { gql, useQuery } from '@apollo/client';
 
 interface CatProps {
   id: string;
@@ -9,29 +10,31 @@ interface CatProps {
   height: number;
 }
 
+const GET_IMAGES = gql`
+  query getImages($limit: Int, $page: Int) {
+    images(limit: $limit, page: $page) {
+      id
+      height
+      width
+      url
+    }
+  }
+`;
+
 const Container = () => {
-  const [data, setData] = useState<CatProps[]>([]);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [isLoadingMore, setIsLoadingMore] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const { loading, error, data, fetchMore } = useQuery(GET_IMAGES, {
+    variables: {
+      limit: 10,
+      page: 1,
+    },
+  });
 
   useEffect(() => {
-    setTimeout(() => hasMore && fetchData({ page, limit }), 800);
-
-    window.addEventListener('scroll', setNextPage);
-
-    return () => window.removeEventListener('scroll', setNextPage);
-  }, [page]);
-
-  const fetchData = ({ limit, page }: { limit: number; page: number }) => {
-    getContents({ limit, page }).then((newData = []) => {
-      if (newData?.length > 0) {
-        setData([...data, ...newData]);
-      } else if (newData?.length < limit) {
-        setHasMore(false);
-      }
-    });
-  };
+    window.addEventListener('scroll', loadMoreImages);
+    return () => window.removeEventListener('scroll', loadMoreImages);
+  }, [currentPage]);
 
   const isAtTheBottom = () => {
     const { scrollHeight, scrollTop } = document.documentElement;
@@ -39,39 +42,54 @@ const Container = () => {
     return scrollHeight - scrollTop <= innerHeight;
   };
 
-  const setNextPage = useCallback(() => {
+  const loadMoreImages = () => {
     if (isAtTheBottom()) {
-      setPage(page + 1);
-    }
-  }, [page]);
-
-  const getContents = ({
-    limit = 10,
-    page = 1,
-  }: {
-    limit: number;
-    page: number;
-  }) => {
-    return fetch(
-      `https://api.thecatapi.com/v1/images/search?limit=${limit}&page=${page}`
-    )
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
+      const nextPage = currentPage + 1;
+      fetchMore({
+        variables: {
+          limit: 10,
+          page: nextPage,
+        },
+      }).then(({ data }) => {
+        if (data?.images?.length === 0) {
+          setIsLoadingMore(false);
+        } else {
+          setCurrentPage(nextPage);
         }
-        return response.json();
-      })
-      .catch((error) => console.error(error));
+      });
+    }
   };
+
+  if (loading) {
+    return <h1>Loading</h1>;
+  }
+
+  if (error) {
+    return <h1>Error</h1>;
+  }
 
   return (
     <div>
-      {data.map((cat: CatProps) => (
+      {data?.images?.map((cat: CatProps) => (
         <Box key={cat.id} catInfo={cat} />
       ))}
-      <Status hasMore={hasMore} />
+      <Status hasMore={isLoadingMore} />
     </div>
   );
 };
 
 export default Container;
+
+// updateQuery: (previousResult, { fetchMoreResult }) => {
+//   if (!fetchMoreResult || fetchMoreResult.images.length === 0) {
+//     setIsLoadingMore(false);
+//     return previousResult;
+//   }
+//   setCurrentPage(nextPage);
+//   return Object.assign({}, previousResult, {
+//     images: [
+//       ...previousResult.images,
+//       ...fetchMoreResult.images,
+//     ],
+//   });
+// },
