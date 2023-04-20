@@ -8,14 +8,13 @@ const cache = new InMemoryCache({
           keyArgs: false,
 
           read(existing) {
-            return existing && existing.slice(0);
+            return existing;
           },
 
-          merge(existing = [], incoming) {
-            // Slicing is necessary because the existing data is
+          merge(existing = [], incoming = []) {
+            // Note. Slicing is necessary because the existing data is
             // immutable, and frozen in development.
-            const merged = existing ? existing.slice(0) : [];
-            return [...merged, ...incoming];
+            return [...existing, ...incoming];
           },
         },
       },
